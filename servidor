@@ -27,37 +27,61 @@ def dados_recebidos(conexao, dados):
     if dados == b'':
         return sair(conexao)
     
-    # Separa os PINGs (b'\r\n') sem apagar os b'\r\n'
+    # Separa os comandos (b'\r\n') sem apagar os b'\r\n'
     pattern = b'(?<=\r\n)'
     dados = [substring for substring in re.split(pattern, dados)]
     
-    # Itera sob cada comando PING
+    # Itera sob cada comando
     for d in dados:
         # Processa os comandos bem formados
         if d.endswith(b'\r\n'):
+            
             # Concatena os residuais com os dados
             d = conexao.residuais + d
             
-            # Tratando comando PING
+            # Comando PING
             if getComando(d) == b'PING':
-                # Remove b'PING ' da mensagem
                 d = d.replace(b'PING ', b'')
-                
-                # Envia para o cliente e printa
                 conexao.enviar(b':server PONG server :' + d)
 
-            # Tratando comando NICK
+            # Comando NICK
             if getComando(d) == b'NICK':
                 nick = d.replace(b'NICK ', b'').replace(b'\r\n', b'')
+                
+                # Caso 1: Nome válido
                 if validar_nome(nick):
-                    if nick in conexao.names:
-                        conexao.enviar(b':server 433 * %s :Nickname is already in use\r\n' % nick)
+                    
+                    # Caso 1.1: Nick NÃO-disponível (não Case Sensitive)
+                    if nick.lower() in map(bytes.lower, apelidos.values()):
+                        
+                        # Caso 1.1.1: 1o acesso
+                        if conexao.nick == b'':
+                            conexao.enviar(b':server 433 * %s :Nickname is already in use\r\n' % nick)
+                            
+                        # Caso 1.1.2: Troca
+                        else:
+                            conexao.enviar(b':server 433 %s %s :Nickname is already in use\r\n' % (conexao.nick, nick))
+                    
+                    # Caso 1.2: Nick disponível    
                     else:
-                       conexao.enviar(b':server 001 %s :Welcome\r\n' % nick)
-                       conexao.enviar(b':server 422 %s :MOTD File is missing\r\n' % nick)
+                        # Caso 1.2.1: 1o acesso
+                        if conexao.nick == b'':
+                            conexao.enviar(b':server 001 %s :Welcome\r\n' % nick)
+                            conexao.enviar(b':server 422 %s :MOTD File is missing\r\n' % nick)
+                            
+                        # Caso 1.2.2: Troca
+                        else:
+                            conexao.enviar(b':%s NICK %s\r\n' % (conexao.nick, nick))
+                            
+                        # Registra independente do caso
+                        apelidos[conexao] = nick # Associa o nome e a conexão
+                        conexao.nick = nick # Registra o nome da conexão no objeto
+
+                # Caso 2: Nome inválido
                 else:
-                    conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick)
-            
+                    conexao.enviar(conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick))
+
+            # Printa
             print(conexao, d)
             
             # Reseta o resíduo
@@ -78,6 +102,9 @@ def conexao_aceita(conexao):
     print(conexao, 'nova conexão')
     conexao.registrar_recebedor(dados_recebidos)
 
+
+# Lista de NICKs
+apelidos = {}
 
 servidor = Servidor(6667)
 servidor.registrar_monitor_de_conexoes_aceitas(conexao_aceita)

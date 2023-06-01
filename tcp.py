@@ -19,8 +19,8 @@ class Conexao:
         # Passo 2: string inicialmente vazia para armazenar os dados residuais da mensagem
         self.residuais = b''
         
-        # Passo 3: lista de nomes
-        self.names = []
+        # Passo 4: nick associado à conexão
+        self.nick = b''
 
     def registrar_recebedor(self, callback):
         asyncio.get_event_loop().add_reader(self.s, lambda: callback(self, self.s.recv(8192)))
