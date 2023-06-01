@@ -17,6 +17,9 @@ def randletters(n):
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(('localhost', 6667))
 
+print('[TEST3]')
+print()
+
 # Verifica se o servidor nega nicks contendo caracteres especiais
 nick = b'0' + randletters(7)
 s.sendall(b'NIC')
@@ -41,5 +44,8 @@ print('Caso 3.2 OK!')
 r,_,_=select.select([s],[],[],0.1)
 assert r == []  # não é pra receber mais nada além disso
 print('Caso 4 OK!')
+
+print()
+print('FINALIZADO!')
 
 s.shutdown(socket.SHUT_RDWR)

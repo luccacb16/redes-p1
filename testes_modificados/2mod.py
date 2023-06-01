@@ -11,6 +11,9 @@ def recvline(s):
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(('localhost', 6667))
 
+print('[TEST2]')
+print()
+
 # Verifica se o servidor lida corretamente com comando recebido em partes quebradas
 #args = base64.b32encode(os.urandom(16))
 args = b'PRIMEIRA MSG'
@@ -57,5 +60,8 @@ print('Caso 3.4 OK')
 s.sendall(b'\n')
 assert recvline(s) == b':server PONG server :%s\r\n' % args3
 print('Caso 3.5 OK')
+
+print()
+print('FINALIZADO!')
 
 s.shutdown(socket.SHUT_WR)
