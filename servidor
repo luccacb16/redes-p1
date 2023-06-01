@@ -3,6 +3,9 @@ import asyncio
 from tcp import Servidor
 import re
 
+# Remover warnings de Decprecation do run_loop_forever()
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 def validar_nome(nome):
     return re.match(br'^[a-zA-Z][a-zA-Z0-9_-]*$', nome) is not None
@@ -13,10 +16,62 @@ def sair(conexao):
     conexao.fechar()
 
 
+def getComando(string):
+    if string.startswith(b'PING'):
+        return b'PING'
+    
+    if string.startswith(b'NICK'):
+        return b'NICK'
+
 def dados_recebidos(conexao, dados):
     if dados == b'':
         return sair(conexao)
-    print(conexao, dados)
+    
+    # Separa os PINGs (b'\r\n') sem apagar os b'\r\n'
+    pattern = b'(?<=\r\n)'
+    dados = [substring for substring in re.split(pattern, dados)]
+    
+    # Itera sob cada comando PING
+    for d in dados:
+        # Processa os comandos bem formados
+        if d.endswith(b'\r\n'):
+            # Concatena os residuais com os dados
+            d = conexao.residuais + d
+            
+            # Tratando comando PING
+            if getComando(d) == b'PING':
+                # Remove b'PING ' da mensagem
+                d = d.replace(b'PING ', b'')
+                
+                # Envia para o cliente e printa
+                conexao.enviar(b':server PONG server :' + d)
+
+            # Tratando comando NICK
+            if getComando(d) == b'NICK':
+                nick = d.replace(b'NICK ', b'').replace(b'\r\n', b'')
+                if validar_nome(nick):
+                    if nick in conexao.names:
+                        conexao.enviar(b':server 433 * %s :Nickname is already in use\r\n' % nick)
+                    else:
+                       conexao.enviar(b':server 001 %s :Welcome\r\n' % nick)
+                       conexao.enviar(b':server 422 %s :MOTD File is missing\r\n' % nick)
+                else:
+                    conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick)
+            
+            print(conexao, d)
+            
+            # Reseta o resíduo
+            conexao.residuais = b''
+            
+        else:
+            # Concatena os dados que não terminam com b'\n' e salva nos residuais
+            conexao.residuais += d
+    
+    # Caso os resíduos se completem e não hajam mais mensagens em seguida
+    if conexao.residuais.endswith(b'\r\n'):
+        conexao.enviar(b':server PONG server :' + conexao.residuais.replace(b'PING ', b'')) # Remove o comando PING
+        conexao.residuais = b''
+
 
 
 def conexao_aceita(conexao):
@@ -26,4 +81,5 @@ def conexao_aceita(conexao):
 
 servidor = Servidor(6667)
 servidor.registrar_monitor_de_conexoes_aceitas(conexao_aceita)
+print('Servidor iniciado na porta 6667')
 asyncio.get_event_loop().run_forever()
