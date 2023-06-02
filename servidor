@@ -14,17 +14,7 @@ def validar_nome(nome):
 def sair(conexao):
     print(conexao, 'conexão fechada')
     conexao.fechar()
-
-
-def getComando2(string):
-    if string.startswith(b'PING'):
-        return b'PING'
     
-    if string.startswith(b'NICK'):
-        return b'NICK'
-    
-    if string.startswith(b'PRIVMSG'):
-        return b'PRIVMSG'
     
 def getComando(string, comando):
     return string.startswith(comando)
@@ -105,9 +95,9 @@ def dados_recebidos(conexao, dados):
                     # Verifica se o usuário está no canal
                     if conexao in canais[nome_canal.lower()]:
                         # Manda para todos os usuários que estão naquela canal
-                        for users in canais[nome_canal.lower()]:
-                            if users != conexao:
-                                users.enviar(b':%s PRIVMSG %s :%s\r\n' % (conexao.nick, b'#' + nome_canal, msg))
+                        for user in canais[nome_canal.lower()]:
+                            if user != conexao:
+                                user.enviar(b':%s PRIVMSG %s :%s\r\n' % (conexao.nick, b'#' + nome_canal, msg))
 
      
             # Comando JOIN
@@ -119,21 +109,43 @@ def dados_recebidos(conexao, dados):
                     nome_canal = nome_canal.replace(b'#', b'')
                     
                     # Canal não existe ainda     
-                    if not nome_canal.lower() in canais:
+                    if nome_canal.lower() not in canais:
                         canais[nome_canal.lower()] = [] # Cria a lista de nomes
                     
                     # Usuário não está no canal ainda
-                    if not conexao in canais[nome_canal.lower()]:
+                    if conexao not in canais[nome_canal.lower()]:
                         canais[nome_canal.lower()].append(conexao) # Registra a conexão do usuário no canal
                         conexao.enviar(b':%s JOIN :%s\r\n' % (conexao.nick, b'#' + nome_canal))
                     
                     # Registra o canal na lista de canais da conexão
-                    if not nome_canal.lower() in conexao.canais:
+                    if nome_canal.lower() not in conexao.canais:
                         conexao.canais.append(nome_canal.lower())
                 
                 # Caso 2: Nome do canal inválido
                 else:
                     conexao.enviar(b':server 403 canal :No such channel\r\n')
+                    
+            
+            # Comando PART
+            if getComando(d, b'PART'):
+                # Remove tudo, inclusive a mensagem de partida, deixando apenas o nome do canal
+                nome_canal = d.replace(b'PART ', b'').replace(b'\r\n', b'').split(b' :', 1)[0]
+                print(nome_canal)
+                
+                # Se o canal começa com #
+                if nome_canal.startswith(b'#'):
+                    nome_canal = nome_canal.replace(b'#', b'')
+                    
+                    # Se o canal existe, se o usuário está no canal
+                    if nome_canal.lower() in canais and nome_canal.lower() in conexao.canais:
+                        
+                        # Envia para todos os usuários do canal
+                        for user in canais[nome_canal.lower()]:
+                            user.enviar(b':%s PART %s\r\n' % (conexao.nick, b'#' + nome_canal))
+                            
+                        # Remove a conexão do canal e o canal da lista da conexão
+                        canais[nome_canal.lower()].remove(conexao)
+                        conexao.canais.remove(nome_canal.lower())
         
         
                 
