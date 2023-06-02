@@ -38,18 +38,16 @@ def dados_recebidos(conexao, dados):
     dados = [substring for substring in re.split(pattern, dados)]
     
     
-    # Itera sob cada comando
-    for d in dados:
-        # Processa os comandos bem formados
-        if d.endswith(b'\r\n'):
+    for d in dados: # Itera sob cada comando
+        if d.endswith(b'\r\n'): # Processa os comandos bem formados
+            d = conexao.residuais + d # Concatena os residuais com os dados
             
-            # Concatena os residuais com os dados
-            d = conexao.residuais + d
             
             # Comando PING
             if getComando(d, b'PING'):
                 d = d.replace(b'PING ', b'')
                 conexao.enviar(b':server PONG server :' + d)
+
 
             # Comando NICK
             if getComando(d, b'NICK'):
@@ -58,7 +56,7 @@ def dados_recebidos(conexao, dados):
                 # Caso 1: Nome válido
                 if validar_nome(nick):
                     
-                    # Caso 1.1: Nick NÃO-disponível (não Case Sensitive)
+                    # Caso 1.1: Nick NÃO-disponível (não Case-Sensitive)
                     if nick.lower() in apelidos:
                         
                         # Caso 1.1.1: 1o acesso
@@ -80,6 +78,7 @@ def dados_recebidos(conexao, dados):
                         else:
                             conexao.enviar(b':%s NICK %s\r\n' % (conexao.nick, nick))
                             del apelidos[conexao.nick.lower()] # Apaga o nome antigo do dicionário
+                            # Se não apagar, durante o 'if valor in apelidos.values()' pode achar a conexão antiga
                             
                         # Registra independente do caso
                         apelidos[nick.lower()] = conexao # Associa o nome e a conexão
@@ -89,14 +88,55 @@ def dados_recebidos(conexao, dados):
                 else:
                     conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick)
                     
+                    
             # Comando PRIVMSG
             if getComando(d, b'PRIVMSG'):
-                d = d.replace(b'PRIVMSG ', b'').replace(b'\r\n', b'')
-                dest, msg = d.split(b' :', 1)
+                priv = d.replace(b'PRIVMSG ', b'').replace(b'\r\n', b'')
+                dest, msg = priv.split(b' :', 1)
                 
+                # Caso 1: Usuário
                 if dest.lower() in apelidos:
                     apelidos[dest.lower()].enviar(b':%s PRIVMSG %s :%s\r\n' % (conexao.nick, dest, msg))
+                
+                # Caso 2: Canal
+                if dest.startswith(b'#'):
+                    nome_canal = dest.replace(b'#', b'')
+                    
+                    # Verifica se o usuário está no canal
+                    if conexao in canais[nome_canal.lower()]:
+                        # Manda para todos os usuários que estão naquela canal
+                        for users in canais[nome_canal.lower()]:
+                            if users != conexao:
+                                users.enviar(b':%s PRIVMSG %s :%s\r\n' % (conexao.nick, b'#' + nome_canal, msg))
 
+     
+            # Comando JOIN
+            if getComando(d, b'JOIN'):
+                nome_canal = d.replace(b'JOIN ', b'').replace(b'\r\n', b'')
+                
+                # Caso 1: Nome do canal válido
+                if validar_nome(nome_canal.replace(b'#', b'')) and nome_canal.startswith(b'#'):
+                    nome_canal = nome_canal.replace(b'#', b'')
+                    
+                    # Canal não existe ainda     
+                    if not nome_canal.lower() in canais:
+                        canais[nome_canal.lower()] = [] # Cria a lista de nomes
+                    
+                    # Usuário não está no canal ainda
+                    if not conexao in canais[nome_canal.lower()]:
+                        canais[nome_canal.lower()].append(conexao) # Registra a conexão do usuário no canal
+                        conexao.enviar(b':%s JOIN :%s\r\n' % (conexao.nick, b'#' + nome_canal))
+                    
+                    # Registra o canal na lista de canais da conexão
+                    if not nome_canal.lower() in conexao.canais:
+                        conexao.canais.append(nome_canal.lower())
+                
+                # Caso 2: Nome do canal inválido
+                else:
+                    conexao.enviar(b':server 403 canal :No such channel\r\n')
+        
+        
+                
             # Printa
             print(conexao, d)
             
@@ -117,18 +157,24 @@ def dados_recebidos(conexao, dados):
 
 
 def conexao_aceita(conexao):
-    print(conexao, 'nova conexão')
-    conexao.registrar_recebedor(dados_recebidos)
-    
     # Passo 2
     conexao.residuais = b''
     
     # Passo 4
     conexao.nick = b''
     
+    # Passo 5
+    conexao.canais = []
+    
+    print(conexao, 'nova conexão')
+    conexao.registrar_recebedor(dados_recebidos)
+    
 
 # Lista de nomes
 apelidos = {}
+
+# Lista de canais
+canais = {}
 
 servidor = Servidor(6667)
 servidor.registrar_monitor_de_conexoes_aceitas(conexao_aceita)
