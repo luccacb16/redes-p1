@@ -15,12 +15,6 @@ class Servidor:
 class Conexao:
     def __init__(self, accept_tuple):
         self.s, _ = accept_tuple
-        
-        # Passo 2: string inicialmente vazia para armazenar os dados residuais da mensagem
-        self.residuais = b''
-        
-        # Passo 4: nick associado à conexão
-        self.nick = b''
 
     def registrar_recebedor(self, callback):
         asyncio.get_event_loop().add_reader(self.s, lambda: callback(self, self.s.recv(8192)))

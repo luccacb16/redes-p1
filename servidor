@@ -16,12 +16,18 @@ def sair(conexao):
     conexao.fechar()
 
 
-def getComando(string):
+def getComando2(string):
     if string.startswith(b'PING'):
         return b'PING'
     
     if string.startswith(b'NICK'):
         return b'NICK'
+    
+    if string.startswith(b'PRIVMSG'):
+        return b'PRIVMSG'
+    
+def getComando(string, comando):
+    return string.startswith(comando)
 
 def dados_recebidos(conexao, dados):
     if dados == b'':
@@ -30,6 +36,7 @@ def dados_recebidos(conexao, dados):
     # Separa os comandos (b'\r\n') sem apagar os b'\r\n'
     pattern = b'(?<=\r\n)'
     dados = [substring for substring in re.split(pattern, dados)]
+    
     
     # Itera sob cada comando
     for d in dados:
@@ -40,19 +47,19 @@ def dados_recebidos(conexao, dados):
             d = conexao.residuais + d
             
             # Comando PING
-            if getComando(d) == b'PING':
+            if getComando(d, b'PING'):
                 d = d.replace(b'PING ', b'')
                 conexao.enviar(b':server PONG server :' + d)
 
             # Comando NICK
-            if getComando(d) == b'NICK':
+            if getComando(d, b'NICK'):
                 nick = d.replace(b'NICK ', b'').replace(b'\r\n', b'')
                 
                 # Caso 1: Nome válido
                 if validar_nome(nick):
                     
                     # Caso 1.1: Nick NÃO-disponível (não Case Sensitive)
-                    if nick.lower() in map(bytes.lower, apelidos.values()):
+                    if nick.lower() in apelidos:
                         
                         # Caso 1.1.1: 1o acesso
                         if conexao.nick == b'':
@@ -72,14 +79,23 @@ def dados_recebidos(conexao, dados):
                         # Caso 1.2.2: Troca
                         else:
                             conexao.enviar(b':%s NICK %s\r\n' % (conexao.nick, nick))
+                            del apelidos[conexao.nick.lower()] # Apaga o nome antigo do dicionário
                             
                         # Registra independente do caso
-                        apelidos[conexao] = nick # Associa o nome e a conexão
+                        apelidos[nick.lower()] = conexao # Associa o nome e a conexão
                         conexao.nick = nick # Registra o nome da conexão no objeto
 
                 # Caso 2: Nome inválido
                 else:
-                    conexao.enviar(conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick))
+                    conexao.enviar(b':server 432 * %s :Erroneous nickname\r\n' % nick)
+                    
+            # Comando PRIVMSG
+            if getComando(d, b'PRIVMSG'):
+                d = d.replace(b'PRIVMSG ', b'').replace(b'\r\n', b'')
+                dest, msg = d.split(b' :', 1)
+                
+                if dest.lower() in apelidos:
+                    apelidos[dest.lower()].enviar(b':%s PRIVMSG %s :%s\r\n' % (conexao.nick, dest, msg))
 
             # Printa
             print(conexao, d)
@@ -90,20 +106,28 @@ def dados_recebidos(conexao, dados):
         else:
             # Concatena os dados que não terminam com b'\n' e salva nos residuais
             conexao.residuais += d
-    
+
     # Caso os resíduos se completem e não hajam mais mensagens em seguida
     if conexao.residuais.endswith(b'\r\n'):
         conexao.enviar(b':server PONG server :' + conexao.residuais.replace(b'PING ', b'')) # Remove o comando PING
         conexao.residuais = b''
+        
+        print(conexao, d)
 
 
 
 def conexao_aceita(conexao):
     print(conexao, 'nova conexão')
     conexao.registrar_recebedor(dados_recebidos)
+    
+    # Passo 2
+    conexao.residuais = b''
+    
+    # Passo 4
+    conexao.nick = b''
+    
 
-
-# Lista de NICKs
+# Lista de nomes
 apelidos = {}
 
 servidor = Servidor(6667)
