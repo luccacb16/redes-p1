@@ -15,14 +15,17 @@ def sair(conexao):
     print(conexao, 'conexão fechada')
     
     # Itera pelos canais em que o usuário está
-    for nome_canal in conexao.canais:
-        canais[nome_canal.lower()].remove(conexao) # Remove o usuário da lista de nomes do canal
-        
-        for user in canais[nome_canal.lower()]: # Itera pelos usuários de cada canal em que o usuário está
-            user.enviar(b':%s QUIT :Connection closed\r\n' % conexao.nick)
+    if hasattr(conexao, 'canais'):
+        for nome_canal in conexao.canais:
+            if conexao in canais[nome_canal.lower()]:
+                canais[nome_canal.lower()].remove(conexao) # Remove o usuário da lista de nomes do canal
+            
+            for user in canais[nome_canal.lower()]: # Itera pelos usuários de cada canal em que o usuário está
+                user.enviar(b':%s QUIT :Connection closed\r\n' % conexao.nick)
             
     # Remove o nome do usuário da lista de apelidos
-    del apelidos[conexao.nick.lower()]
+    if conexao.nick.lower() != b'':
+        del apelidos[conexao.nick.lower()]
 
     conexao.fechar()
     
@@ -126,11 +129,22 @@ def dados_recebidos(conexao, dados):
                     # Usuário não está no canal ainda
                     if conexao not in canais[nome_canal.lower()]:
                         canais[nome_canal.lower()].append(conexao) # Registra a conexão do usuário no canal
-                        conexao.enviar(b':%s JOIN :%s\r\n' % (conexao.nick, b'#' + nome_canal))
+                        
+                        # Envia a mensagem de JOIN para todos os usuários do canal
+                        for user in canais[nome_canal.lower()]:
+                            user.enviar(b':%s JOIN :%s\r\n' % (conexao.nick, b'#' + nome_canal))
                     
                     # Registra o canal na lista de canais da conexão
                     if nome_canal.lower() not in conexao.canais:
                         conexao.canais.append(nome_canal.lower())
+                        
+                    # Passo 8
+                    lista_nomes = [user.nick for user in canais[nome_canal.lower()]]
+                    lista_nomes = b' '.join(sorted(lista_nomes))
+                    
+                    # Envia a lista e o fim da lista para o novo membro do canal
+                    conexao.enviar(b':server 353 %s = %s :%s\r\n' % (conexao.nick, b'#' + nome_canal, lista_nomes))
+                    conexao.enviar(b':server 366 %s %s :End of /NAMES list.\r\n' % (conexao.nick, b'#' + nome_canal))
                 
                 # Caso 2: Nome do canal inválido
                 else:
