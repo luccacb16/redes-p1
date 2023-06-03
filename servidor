@@ -10,9 +10,20 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def validar_nome(nome):
     return re.match(br'^[a-zA-Z][a-zA-Z0-9_-]*$', nome) is not None
 
-
+    
 def sair(conexao):
     print(conexao, 'conexão fechada')
+    
+    # Itera pelos canais em que o usuário está
+    for nome_canal in conexao.canais:
+        canais[nome_canal.lower()].remove(conexao) # Remove o usuário da lista de nomes do canal
+        
+        for user in canais[nome_canal.lower()]: # Itera pelos usuários de cada canal em que o usuário está
+            user.enviar(b':%s QUIT :Connection closed\r\n' % conexao.nick)
+            
+    # Remove o nome do usuário da lista de apelidos
+    del apelidos[conexao.nick.lower()]
+
     conexao.fechar()
     
     
@@ -130,7 +141,6 @@ def dados_recebidos(conexao, dados):
             if getComando(d, b'PART'):
                 # Remove tudo, inclusive a mensagem de partida, deixando apenas o nome do canal
                 nome_canal = d.replace(b'PART ', b'').replace(b'\r\n', b'').split(b' :', 1)[0]
-                print(nome_canal)
                 
                 # Se o canal começa com #
                 if nome_canal.startswith(b'#'):
